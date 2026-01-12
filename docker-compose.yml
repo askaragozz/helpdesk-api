@@ -1,0 +1,32 @@
+version: "3.9"
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: docker/php/Dockerfile
+    container_name: helpdesk_api_app
+    volumes:
+      - .:/var/www/html
+    ports:
+      - "8000:8000"
+    depends_on:
+      - db
+    env_file:
+      - .env
+    command: php artisan serve --host=0.0.0.0 --port=8000
+
+  db:
+    image: postgres:16
+    container_name: helpdesk_api_db
+    environment:
+      POSTGRES_DB: helpdesk_api
+      POSTGRES_USER: helpdesk_user
+      POSTGRES_PASSWORD: strongpassword
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
