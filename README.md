@@ -84,3 +84,22 @@ cp .env.example .env
 php artisan key:generate
 php artisan migrate
 php artisan serve
+
+## 🐳 Docker Setup (Recommended)
+
+This project includes a minimal Docker setup for local development.
+
+### Services
+- **Laravel API** (PHP 8.3)
+- **PostgreSQL 16**
+
+### Requirements
+- Docker
+- Docker Compose (v2)
+
+### Environment
+When running with Docker, the database host is resolved via service name:
+
+```env
+DB_HOST=db
+DB_PORT=5432
