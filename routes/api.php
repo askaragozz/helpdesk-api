@@ -24,6 +24,8 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::get('/tickets/{ticket}', [TicketController::class, 'show']);
     Route::patch('/tickets/{ticket}', [TicketController::class, 'update']);
     Route::patch('/tickets/{ticket}/assign', [TicketController::class, 'assign']);
-    Route::patch('/tickets/{ticket}/status', [TicketController::class, 'setStatus']);
 
+    Route::patch('/tickets/{ticket}/status', [TicketController::class, 'updateStatus']);
+    Route::get('/tickets/{ticket}/status-history', [TicketController::class, 'statusHistory']);
 });
+

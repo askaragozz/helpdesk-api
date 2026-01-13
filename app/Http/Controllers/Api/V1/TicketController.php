@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Ticket;
 use App\Models\User;
+use App\Services\Tickets\TicketStatusService;
 use Illuminate\Http\Request;
 
 class TicketController extends Controller
@@ -107,5 +108,35 @@ class TicketController extends Controller
         return response()->json(['data' => $ticket]);
     }
 
-    
+    public function updateStatus(Request $request, \App\Models\Ticket $ticket, TicketStatusService $service)
+    {
+        $data = $request->validate([
+            'status' => ['required', 'string', 'in:open,in_progress,resolved,closed'],
+            'note' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $updated = $service->transition(
+            ticket: $ticket,
+            toStatus: $data['status'],
+            actor: $request->user(),
+            note: $data['note'] ?? null
+        );
+
+        return response()->json([
+            'data' => $updated,
+        ]);
+    }
+
+    public function statusHistory(\App\Models\Ticket $ticket)
+    {
+        $items = $ticket->statusHistories()
+            ->with('actor:id,name,email')
+            ->orderBy('id')
+            ->get();
+
+        return response()->json([
+            'data' => $items,
+        ]);
+    }
+
 }

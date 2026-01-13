@@ -8,6 +8,7 @@ services:
     container_name: helpdesk_api_app
     volumes:
       - .:/var/www/html
+    user: "${UID}:${GID}"
     ports:
       - "8000:8000"
     depends_on:
