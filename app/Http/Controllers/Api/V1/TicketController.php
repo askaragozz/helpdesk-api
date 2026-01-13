@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Ticket;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class TicketController extends Controller
@@ -70,6 +71,38 @@ class TicketController extends Controller
         }
 
         $ticket->update($data);
+
+        return response()->json(['data' => $ticket]);
+    }
+
+    public function assign(Request $request, Ticket $ticket)
+    {
+        if (!$request->user()->isAgent()) {
+            abort(403, 'Forbidden');
+        }
+
+        $data = $request->validate([
+            'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
+        ]);
+
+        $ticket->assigned_to = $data['assigned_to'] ?? null;
+        $ticket->save();
+
+        return response()->json(['data' => $ticket]);
+    }
+
+    public function setStatus(Request $request, Ticket $ticket)
+    {
+        if (!$request->user()->isAgent()) {
+            abort(403, 'Forbidden');
+        }
+
+        $data = $request->validate([
+            'status' => ['required', 'in:open,in_progress,resolved,closed'],
+        ]);
+
+        $ticket->status = $data['status'];
+        $ticket->save();
 
         return response()->json(['data' => $ticket]);
     }

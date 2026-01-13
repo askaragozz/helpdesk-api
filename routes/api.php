@@ -23,4 +23,7 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
     Route::get('/tickets', [TicketController::class, 'index']);
     Route::get('/tickets/{ticket}', [TicketController::class, 'show']);
     Route::patch('/tickets/{ticket}', [TicketController::class, 'update']);
+    Route::patch('/tickets/{ticket}/assign', [TicketController::class, 'assign']);
+    Route::patch('/tickets/{ticket}/status', [TicketController::class, 'setStatus']);
+
 });
