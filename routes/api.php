@@ -2,7 +2,7 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\V1\AuthController;
-
+use App\Http\Controllers\Api\V1\TicketController;
 
 Route::get('/health', function () {
     return response()->json(['status' => 'ok']);
@@ -16,4 +16,11 @@ Route::prefix('v1')->group(function () {
         Route::get('/auth/me', [AuthController::class, 'me']);
         Route::post('/auth/logout', [AuthController::class, 'logout']);
     });
+});
+
+Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
+    Route::post('/tickets', [TicketController::class, 'store']);
+    Route::get('/tickets', [TicketController::class, 'index']);
+    Route::get('/tickets/{ticket}', [TicketController::class, 'show']);
+    Route::patch('/tickets/{ticket}', [TicketController::class, 'update']);
 });
