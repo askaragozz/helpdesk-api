@@ -13,12 +13,41 @@ class TicketController extends Controller
 
     public function index(Request $request)
     {
-        $tickets = Ticket::query()
-            ->where('created_by', $request->user()->id)
-            ->latest()
-            ->paginate(20);
 
-        return response()->json(['data' => $tickets]);
+        $data = $request->validate([
+            'scope' => ['nullable', 'string', 'in:assigned,unassigned,all'],
+            'status' => ['nullable', 'string', 'in:open,in_progress,resolved,closed'], // optional but useful
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        
+        $user = $request->user();
+        $scope = $data['scope'] ?? 'assigned';
+        $perPage = $data['per_page'] ?? 20;
+
+        $q = \App\Models\Ticket::query();
+
+        if (!empty($data['status'])) {
+            $q->where('status', $data['status']);
+        }
+
+        if ($scope === 'assigned') {
+            $q->where('assigned_to', $user->id);
+        } elseif ($scope === 'unassigned') {
+            $q->whereNull('assigned_to');
+        } elseif ($scope === 'all') {
+            if (($user->role ?? null) !== 'admin') {
+                return response()->json([ 'message' => 'Only admin can view all tickets.'], 403);
+            }
+        }
+
+
+        $tickets = $q
+            ->orderByDesc('id')
+            ->paginate($perPage)
+            ->withQueryString();
+
+            return response()->json($tickets);
     }
 
     public function show(Request $request, Ticket $ticket)
