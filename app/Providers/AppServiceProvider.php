@@ -21,4 +21,9 @@ class AppServiceProvider extends ServiceProvider
     {
         //
     }
+
+    protected $policies = [
+        \App\Models\Ticket::class => \App\Policies\TicketPolicy::class,
+    ];
+
 }

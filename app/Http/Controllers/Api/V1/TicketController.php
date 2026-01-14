@@ -172,20 +172,16 @@ class TicketController extends Controller
         ]);
     }
 
-    public function listComments(Request $request, \App\Models\Ticket $ticket)
+    public function listComments(Request $request, Ticket $ticket)
     {
-        $user = $request->user();
-
-        if (!$this->canAccessTicket($ticket, $user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+        $this->authorize('view', $ticket);
 
         $q = $ticket->comments()
             ->with('author:id,name,email')
             ->orderBy('id');
 
-        // owner can’t see internal notes
-        if (!($this->isAdmin($user) || $this->isAssignee($ticket, $user))) {
+        $canSeeInternal = $request->user()->can('viewInternalNotes', $ticket);
+        if (!$canSeeInternal) {
             $q->where('visibility', 'public');
         }
 
@@ -193,12 +189,12 @@ class TicketController extends Controller
 
         $lastReadAt = TicketCommentRead::query()
             ->where('ticket_id', $ticket->id)
-            ->where('user_id', $user->id)
+            ->where('user_id', $request->user()->id)
             ->value('last_read_at');
 
         $unreadCount = TicketComment::query()
             ->where('ticket_id', $ticket->id)
-            ->when(!($this->isAdmin($user) || $this->isAssignee($ticket, $user)), fn ($qq) => $qq->where('visibility', 'public'))
+            ->when(!$canSeeInternal, fn ($qq) => $qq->where('visibility', 'public'))
             ->when($lastReadAt, fn ($qq) => $qq->where('created_at', '>', $lastReadAt))
             ->count();
 
@@ -211,13 +207,10 @@ class TicketController extends Controller
         ]);
     }
 
-    public function addComment(Request $request, \App\Models\Ticket $ticket)
-    {
-        $user = $request->user();
 
-        if (!$this->canAccessTicket($ticket, $user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+    public function addComment(Request $request, Ticket $ticket)
+    {
+        $this->authorize('comment', $ticket);
 
         $data = $request->validate([
             'body' => ['required', 'string', 'min:1'],
@@ -226,14 +219,13 @@ class TicketController extends Controller
 
         $visibility = $data['visibility'] ?? 'public';
 
-        // internal notes: only assignee/admin
-        if ($visibility === 'internal' && !($this->isAdmin($user) || $this->isAssignee($ticket, $user))) {
-            return response()->json(['message' => 'Forbidden'], 403);
+        if ($visibility === 'internal') {
+            $this->authorize('internalComment', $ticket);
         }
 
         $comment = TicketComment::create([
             'ticket_id' => $ticket->id,
-            'author_id' => $user->id,
+            'author_id' => $request->user()->id,
             'body' => $data['body'],
             'visibility' => $visibility,
         ]);
@@ -243,18 +235,15 @@ class TicketController extends Controller
         ], 201);
     }
 
-    public function markCommentsRead(Request $request, \App\Models\Ticket $ticket)
-    {
-        $user = $request->user();
 
-        if (!$this->canAccessTicket($ticket, $user)) {
-            return response()->json(['message' => 'Forbidden'], 403);
-        }
+    public function markCommentsRead(Request $request, Ticket $ticket)
+    {
+        $this->authorize('view', $ticket);
 
         $now = now();
 
         TicketCommentRead::query()->updateOrCreate(
-            ['ticket_id' => $ticket->id, 'user_id' => $user->id],
+            ['ticket_id' => $ticket->id, 'user_id' => $request->user()->id],
             ['last_read_at' => $now]
         );
 
@@ -262,31 +251,10 @@ class TicketController extends Controller
             'message' => 'OK',
             'data' => [
                 'ticket_id' => $ticket->id,
-                'user_id' => $user->id,
+                'user_id' => $request->user()->id,
                 'last_read_at' => $now->toISOString(),
             ],
         ]);
-    }
-
-
-    private function isAdmin($user): bool
-    {
-        return ($user->role ?? null) === 'admin';
-    }
-
-    private function isAssignee($ticket, $user): bool
-    {
-        return (int) ($ticket->assigned_to ?? 0) === (int) $user->id;
-    }
-
-    private function isOwner($ticket, $user): bool
-    {
-        return (int) ($ticket->user_id ?? 0) === (int) $user->id;
-    }
-
-    private function canAccessTicket($ticket, $user): bool
-    {
-        return $this->isAdmin($user) || $this->isAssignee($ticket, $user) || $this->isOwner($ticket, $user);
     }
 
 }
