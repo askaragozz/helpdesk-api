@@ -1,82 +1,141 @@
 # Helpdesk API (Laravel)
 
-A backend-only Helpdesk / Ticketing System built with **Laravel** and **PostgreSQL**.  
-This project is designed as a pure REST API to be consumed by external clients (e.g. WordPress, admin panels, or frontend apps).
+A backend-only **Helpdesk / Ticketing System API** built with **Laravel** and **PostgreSQL**.  
+Designed as a **pure REST API** to be consumed by external clients such as **WordPress**, admin panels, or frontend applications.
+
+This project focuses on **clean backend architecture, role-based access control, and real-world ticketing workflows**.
 
 ---
 
 ## 🎯 Project Goals
 
-- Provide a clean, scalable **API-only backend**
-- Demonstrate backend fundamentals:
+- Build a **production-style API-only backend**
+- Demonstrate strong backend fundamentals:
   - RESTful API design
   - Authentication & authorization
+  - Role-based access control (RBAC)
   - Relational data modeling
-  - Role-based access control
+  - Clean response shaping with API Resources
 - Serve as a **portfolio project** for backend-focused roles
 
 ---
 
 ## 🛠 Tech Stack
 
-- **PHP 8+**
+- **PHP 8.3**
 - **Laravel (API-only)**
 - **PostgreSQL**
 - **Laravel Sanctum** (token-based authentication)
-- Git for version control
+- **Docker & Docker Compose**
+- Git
 
 ---
 
 ## 📐 Architecture Decisions
 
-- **API-only**  
-  Web routes, Blade views, and frontend tooling removed.
-- **Token-based authentication**  
-  Laravel Sanctum is used for stateless API authentication.
-- **PostgreSQL**  
-  Chosen for relational integrity and production-grade usage.
-- **Separation of concerns**  
-  Controllers, services, and domain logic kept isolated.
+- **API-only Laravel**
+  - No Blade views or web routes
+  - Designed for external consumption
+- **Token-based authentication**
+  - Stateless API using Laravel Sanctum
+- **PostgreSQL**
+  - Strong relational integrity and production-grade DB
+- **Policy-based authorization**
+  - Laravel Policies used for fine-grained permissions
+- **API Resources**
+  - Consistent, controlled JSON responses
+  - No model leakage to clients
 
 ---
 
-## 🧩 Core Domain (Planned)
+## 🧩 Core Domain
 
 ### User
-- id
-- name
-- email
-- password
-- role (`admin | agent | customer`)
+- `id`
+- `name`
+- `email`
+- `role` (`admin | agent | requester`)
+- authentication tokens
 
 ### Ticket
-- id
-- subject
-- description
-- status (`open | pending | resolved | closed`)
-- priority (`low | medium | high`)
-- customer_id
-- assigned_agent_id
+- `id`
+- `title`
+- `description`
+- `status` (`open | in_progress | resolved | closed`)
+- `priority` (`low | medium | high`)
+- `created_by`
+- `assignee_id`
+- timestamps
 
-### Message
-- id
-- ticket_id
-- sender_id
-- body
+### Ticket Comment
+- `id`
+- `ticket_id`
+- `user_id`
+- `body`
+- `visibility` (`public | internal`)
 - timestamps
 
 ---
 
-## 🔐 Authentication (Planned Endpoints)
+## 🔐 Authentication
 
-- `POST /api/auth/register`
-- `POST /api/auth/login`
-- `GET /api/auth/me`
-- `POST /api/auth/logout`
+This API uses **Laravel Sanctum** with **Bearer tokens**.
+
+### Login
+POST /api/v1/auth/login
+
+Response:
+```json
+{
+  "token": "plain-text-token"
+}
+```
+
+### Using the token
+Include the token in all authenticated requests:
+
+Authorization: Bearer <token>  
+Accept: application/json
 
 ---
 
-## ⚙️ Setup (Local)
+## 👥 Roles & Permissions
+
+| Role       | Capabilities |
+|-----------|--------------|
+| requester | Create tickets, view own tickets, add **public** comments |
+| agent     | View assigned tickets, change status, add **internal & public** comments |
+| admin     | Full access to all tickets, comments, and internal notes |
+
+---
+
+## 🔄 Ticket Lifecycle
+
+open → in_progress → resolved → closed
+
+---
+
+## 📡 API Endpoints
+
+### Authentication
+- POST   /api/v1/auth/register
+- POST   /api/v1/auth/login
+- GET    /api/v1/auth/me
+- POST   /api/v1/auth/logout
+
+### Tickets
+- GET    /api/v1/tickets
+- POST   /api/v1/tickets
+- GET    /api/v1/tickets/{id}
+- PATCH  /api/v1/tickets/{id}/status
+
+### Ticket Comments
+- GET    /api/v1/tickets/{id}/comments
+- POST   /api/v1/tickets/{id}/comments
+
+---
+
+## ⚙️ Local Setup (Without Docker)
 
 ```bash
 composer install
@@ -84,22 +143,44 @@ cp .env.example .env
 php artisan key:generate
 php artisan migrate
 php artisan serve
+```
+
+---
 
 ## 🐳 Docker Setup (Recommended)
 
-This project includes a minimal Docker setup for local development.
-
 ### Services
-- **Laravel API** (PHP 8.3)
-- **PostgreSQL 16**
-
-### Requirements
-- Docker
-- Docker Compose (v2)
+- Laravel API (PHP 8.3)
+- PostgreSQL 16
 
 ### Environment
-When running with Docker, the database host is resolved via service name:
-
 ```env
+DB_CONNECTION=pgsql
 DB_HOST=db
 DB_PORT=5432
+DB_DATABASE=helpdesk
+DB_USERNAME=postgres
+DB_PASSWORD=postgres
+```
+
+### Run
+```bash
+docker compose up -d
+docker compose exec app php artisan migrate
+```
+
+---
+
+## 🚧 Future Improvements
+
+- Feature tests (ticket lifecycle & permissions)
+- OpenAPI / Swagger documentation
+- Soft deletes for tickets
+- SLA timestamps
+- Status history tracking
+
+---
+
+## 📄 License
+
+This project is open-source and intended for **educational and portfolio use**.

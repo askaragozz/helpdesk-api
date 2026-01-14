@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 
+use App\Http\Resources\TicketResource;
 use App\Models\Ticket;
 use App\Models\User;
 use App\Models\TicketComment;
@@ -17,50 +18,44 @@ class TicketController extends Controller
 
     public function index(Request $request)
     {
+        $query = Ticket::query()
+            ->with(['creator', 'assignee'])
+            ->withCount('comments');
 
-        $data = $request->validate([
-            'scope' => ['nullable', 'string', 'in:assigned,unassigned,all'],
-            'status' => ['nullable', 'string', 'in:open,in_progress,resolved,closed'], // optional but useful
-            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
-        ]);
+        // apply your role-based scopes here (requester/agent/admin)
+        // e.g. requester only own:
+        // if ($request->user()->role === 'requester') $query->where('created_by', $request->user()->id);
 
-        
-        $user = $request->user();
-        $scope = $data['scope'] ?? 'assigned';
-        $perPage = $data['per_page'] ?? 20;
+        $tickets = $query->latest()->paginate(15);
 
-        $q = \App\Models\Ticket::query();
-
-        if (!empty($data['status'])) {
-            $q->where('status', $data['status']);
-        }
-
-        if ($scope === 'assigned') {
-            $q->where('assigned_to', $user->id);
-        } elseif ($scope === 'unassigned') {
-            $q->whereNull('assigned_to');
-        } elseif ($scope === 'all') {
-            if (($user->role ?? null) !== 'admin') {
-                return response()->json([ 'message' => 'Only admin can view all tickets.'], 403);
-            }
-        }
-
-
-        $tickets = $q
-            ->orderByDesc('id')
-            ->paginate($perPage)
-            ->withQueryString();
-
-            return response()->json($tickets);
+        return TicketResource::collection($tickets);
     }
 
     public function show(Request $request, Ticket $ticket)
     {
-        if ($ticket->created_by !== $request->user()->id) {
-            abort(403, 'Forbidden');
-        }
+        $this->authorize('view', $ticket);
 
-        return response()->json(['data' => $ticket]);
+        $canSeeInternal = $request->user()->can('viewInternalNotes', $ticket);
+        $lastReadAt = $ticket->last_read_at; // adjust if you store per-user elsewhere
+
+        $unreadCount = TicketComment::query()
+            ->where('ticket_id', $ticket->id)
+            ->when(!$canSeeInternal, fn ($qq) => $qq->where('visibility', 'public'))
+            ->when($lastReadAt, fn ($qq) => $qq->where('created_at', '>', $lastReadAt))
+            ->count();
+
+        $ticket->load([
+            'creator',
+            'assignee',
+            'comments' => fn ($q) => $q
+                ->when(!$canSeeInternal, fn ($qq) => $qq->where('visibility', 'public'))
+                ->latest()
+                ->with('author'),
+        ]);
+
+        $ticket->unread_comments_count = $unreadCount;
+
+        return TicketResource::make($ticket);
     }
 
     public function store(Request $request)
