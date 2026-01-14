@@ -27,5 +27,9 @@ Route::prefix('v1')->middleware('auth:sanctum')->group(function () {
 
     Route::patch('/tickets/{ticket}/status', [TicketController::class, 'updateStatus']);
     Route::get('/tickets/{ticket}/status-history', [TicketController::class, 'statusHistory']);
+
+    Route::get('/tickets/{ticket}/comments', [TicketController::class, 'listComments']);
+    Route::post('/tickets/{ticket}/comments', [TicketController::class, 'addComment']);
+    Route::post('/tickets/{ticket}/comments/read', [TicketController::class, 'markCommentsRead']);
 });
 
