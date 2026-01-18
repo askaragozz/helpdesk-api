@@ -5,7 +5,6 @@ services:
     build:
       context: .
       dockerfile: docker/php/Dockerfile
-    container_name: helpdesk_api_app
     volumes:
       - .:/var/www/html
     user: "${UID}:${GID}"

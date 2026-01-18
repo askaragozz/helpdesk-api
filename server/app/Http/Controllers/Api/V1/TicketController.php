@@ -11,6 +11,9 @@ use App\Models\TicketComment;
 use App\Models\TicketCommentRead;
 
 use App\Services\Tickets\TicketStatusService;
+use App\Services\Tickets\TicketService;
+use App\Services\Tickets\TicketCommentService;
+
 use Illuminate\Http\Request;
 
 class TicketController extends Controller
@@ -58,7 +61,7 @@ class TicketController extends Controller
         return TicketResource::make($ticket);
     }
 
-    public function store(Request $request)
+    public function store(Request $request, TicketService $service)
     {
         $data = $request->validate([
             'title' => ['required', 'string', 'max:200'],
@@ -66,24 +69,17 @@ class TicketController extends Controller
             'priority' => ['nullable', 'in:low,medium,high'],
         ]);
 
-        $ticket = Ticket::create([
-            'title' => $data['title'],
-            'description' => $data['description'],
-            'priority' => $data['priority'] ?? 'medium',
-            'status' => 'open',
-            'created_by' => $request->user()->id,
-            'assigned_to' => null,
-        ]);
+        $ticket = $service->create($data, $request->user());
 
         return response()->json([
-            'data' => $ticket,
+            'data' => new TicketResource($ticket),
         ], 201);
     }
 
-    public function update(Request $request, Ticket $ticket)
+    public function update(Request $request, Ticket $ticket, TicketService $service)
     {
         if ($ticket->created_by !== $request->user()->id) {
-            abort(403, 'Forbidden');
+            abort(403);
         }
 
         $data = $request->validate([
@@ -92,33 +88,30 @@ class TicketController extends Controller
             'priority' => ['sometimes', 'in:low,medium,high'],
         ]);
 
-        // prevent empty payload
         if (empty($data)) {
-            return response()->json([
-                'message' => 'No valid fields provided.',
-            ], 422);
+            return response()->json(['message' => 'No valid fields'], 422);
         }
 
-        $ticket->update($data);
+        $ticket = $service->update($ticket, $data);
 
         return response()->json(['data' => $ticket]);
     }
 
-    public function assign(Request $request, Ticket $ticket)
+    public function assign(Request $request, Ticket $ticket, TicketService $service)
     {
         if (!$request->user()->isAgent()) {
-            abort(403, 'Forbidden');
+            abort(403);
         }
 
         $data = $request->validate([
             'assigned_to' => ['nullable', 'integer', 'exists:users,id'],
         ]);
 
-        $ticket->assigned_to = $data['assigned_to'] ?? null;
-        $ticket->save();
+        $ticket = $service->assign($ticket, $data['assigned_to'] ?? null);
 
         return response()->json(['data' => $ticket]);
     }
+
 
     public function setStatus(Request $request, Ticket $ticket)
     {
@@ -167,49 +160,37 @@ class TicketController extends Controller
         ]);
     }
 
-    public function listComments(Request $request, Ticket $ticket)
-    {
+    public function listComments(
+        Request $request,
+        Ticket $ticket,
+        TicketCommentService $service
+    ) {
         $this->authorize('view', $ticket);
 
-        $q = $ticket->comments()
-            ->with('author:id,name,email')
-            ->orderBy('id');
-
         $canSeeInternal = $request->user()->can('viewInternalNotes', $ticket);
-        if (!$canSeeInternal) {
-            $q->where('visibility', 'public');
-        }
 
-        $comments = $q->get();
-
-        $lastReadAt = TicketCommentRead::query()
-            ->where('ticket_id', $ticket->id)
-            ->where('user_id', $request->user()->id)
-            ->value('last_read_at');
-
-        $unreadCount = TicketComment::query()
-            ->where('ticket_id', $ticket->id)
-            ->when(!$canSeeInternal, fn ($qq) => $qq->where('visibility', 'public'))
-            ->when($lastReadAt, fn ($qq) => $qq->where('created_at', '>', $lastReadAt))
-            ->count();
+        $comments = $service->list($ticket, $request->user(), $canSeeInternal);
+        $unread = $service->unreadCount($ticket, $request->user(), $canSeeInternal);
 
         return response()->json([
             'data' => $comments,
             'meta' => [
-                'last_read_at' => $lastReadAt,
-                'unread_count' => $unreadCount,
+                'unread_count' => $unread,
             ],
         ]);
     }
 
 
-    public function addComment(Request $request, Ticket $ticket)
-    {
+    public function addComment(
+        Request $request,
+        Ticket $ticket,
+        TicketCommentService $service
+    ) {
         $this->authorize('comment', $ticket);
 
         $data = $request->validate([
-            'body' => ['required', 'string', 'min:1'],
-            'visibility' => ['nullable', 'string', 'in:public,internal'],
+            'body' => ['required', 'string'],
+            'visibility' => ['nullable', 'in:public,internal'],
         ]);
 
         $visibility = $data['visibility'] ?? 'public';
@@ -218,12 +199,12 @@ class TicketController extends Controller
             $this->authorize('internalComment', $ticket);
         }
 
-        $comment = TicketComment::create([
-            'ticket_id' => $ticket->id,
-            'author_id' => $request->user()->id,
-            'body' => $data['body'],
-            'visibility' => $visibility,
-        ]);
+        $comment = $service->add(
+            $ticket,
+            $request->user(),
+            $data['body'],
+            $visibility
+        );
 
         return response()->json([
             'data' => $comment->load('author:id,name,email'),
@@ -231,25 +212,18 @@ class TicketController extends Controller
     }
 
 
-    public function markCommentsRead(Request $request, Ticket $ticket)
-    {
+
+    public function markCommentsRead(
+        Request $request,
+        Ticket $ticket,
+        TicketCommentService $service
+    ) {
         $this->authorize('view', $ticket);
 
-        $now = now();
+        $service->markRead($ticket, $request->user());
 
-        TicketCommentRead::query()->updateOrCreate(
-            ['ticket_id' => $ticket->id, 'user_id' => $request->user()->id],
-            ['last_read_at' => $now]
-        );
-
-        return response()->json([
-            'message' => 'OK',
-            'data' => [
-                'ticket_id' => $ticket->id,
-                'user_id' => $request->user()->id,
-                'last_read_at' => $now->toISOString(),
-            ],
-        ]);
+        return response()->json(['message' => 'OK']);
     }
+
 
 }

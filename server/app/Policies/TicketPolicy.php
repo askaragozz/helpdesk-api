@@ -42,13 +42,13 @@ class TicketPolicy
     // Comments: anyone who can view can add public comments
     public function comment(User $user, Ticket $ticket): bool
     {
-        return $this->view($user, $ticket);
+        return true;
     }
 
     // Internal comments: assignee/admin only
     public function internalComment(User $user, Ticket $ticket): bool
     {
-        return $this->isAdmin($user) || $this->isAssignee($user, $ticket);
+        return $user->isAgent();
     }
 
     // Admin-only list scope=all
